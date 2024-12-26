@@ -8,12 +8,13 @@ import { getCollection } from 'astro:content'
 const authors = await getCollection('authors')
 ---
 
+
 <Layout title="Authors" description="A list of authors on this site.">
   <Container class="flex flex-col gap-y-6">
-    <Breadcrumbs items={[{ label: 'Authors', icon: 'lucide:users' }]} />
+    <Breadcrumbs items={[{ label: 'Members', icon: 'lucide:users' }]} />
     {
       authors.length > 0 ? (
-        <ul class="not-prose flex flex-col gap-4">
+        <ul class="not-prose grid grid-cols-1 md:grid-cols-2 gap-4">
           {authors.map((author) => (
             <li>
               <AuthorCard author={author} />

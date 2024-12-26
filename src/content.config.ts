@@ -37,7 +37,9 @@ const authors = defineCollection({
     twitter: z.string().url().optional(),
     github: z.string().url().optional(),
     linkedin: z.string().url().optional(),
-    discord: z.string().url().optional(),
+    youtube: z.string().url().optional(),
+    instagram: z.string().url().optional(),
+    facebook: z.string().url().optional(),
   }),
 })
 
@@ -50,6 +52,7 @@ const projects = defineCollection({
       tags: z.array(z.string()),
       image: image(),
       link: z.string().url(),
+      
     }),
 })
 
