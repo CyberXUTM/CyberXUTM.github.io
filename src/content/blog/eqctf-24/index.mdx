@@ -44,11 +44,11 @@ Now inside the `if` block there are `two functions` you need to consider.
     }
 ```
 
-Php is a bit weird, if you `md5(240610708)` is is technically will be the same as `0` but it only works in one condition, which is when using `==` operator.
+Php is a bit weird, if you encrypt `240610708` with hash.. the result `0e462097431906509019562988736854` will be the same as `0` but it only works in one condition, which is when using `==` operator.
 
 > `md5(240610708) = 0e462097431906509019562988736854 = 0 (when ==)`
 
-So if we are comparing `0e462097431906509019562988736854` and `00e39786989574093743872279278460` with `==` it is technically true because `0 == 0`
+So if we are comparing `0e462097431906509019562988736854` and `0e39786989574093743872279278460` with `==` it is technically true because `0 == 0`
 
 #### egg Function
 
