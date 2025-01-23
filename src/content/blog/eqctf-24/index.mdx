@@ -4,7 +4,7 @@ description: 'Challenges made by otai, solved by skiddies'
 date: 2025-1-22
 tags: ['writeups']
 image: './EQCTF.png'
-authors: ['aan']
+authors: ['aan', 'bakayang', 'weixuan']
 ---
 
 # Web
@@ -231,18 +231,6 @@ response = urllib.request.urlopen(req)
 print(response.read().decode())
 ```
 
-## Protecc
-
-### Analysis
-
-### Solve Script
-
-## PAAS
-
-### Analysis
-
-### Solve Script
-
 # Mobile
 
 ## Who's that Pukimon
@@ -368,3 +356,129 @@ async function readData() {
 
 readData()
 ```
+
+# OSINT
+
+## Lost At Sea
+
+- You are given an image and need to find its **exact coordinates**.
+
+![Initial scene](./Pasted%20image%2020250119154146.png)
+
+---
+
+- At first I search for the `NOVOTEL`, and reverse search the cropped image of the hotel.
+  ![Novotel search](./Pasted%20image%2020250119160436.png)
+
+---
+
+- I found the location at `lyon, france` and tried every possible attempts from the angle (street view) ... none of them works, I even tried changing different time.
+
+![Lyon search](./Pasted%20image%2020250119160852.png)
+
+---
+
+- Then, after multiple attempts, I click at the `river` and open the `street view`.
+
+![River view](./Pasted%20image%2020250119161753.png)
+
+---
+
+- After `analyze and compare` the `image and street view`, I found out they are the same, the exact coords is at the `link url in red`.
+
+![Final coordinates](./Pasted%20image%2020250119155109.png)
+
+---
+
+## Garry: Beyond Music's End 3
+
+Desc: Garry and his friends seem to be talking about a new threat group that steals wizard data, wonder what the fuzz is all about...
+
+---
+
+- This one need to find the `github repo` since they mentioned `repo`.
+
+![Github search](./Screenshot%202025-01-19%20at%204.46.13%20PM.png)
+
+---
+
+- After looking through the files, I found out they prob removed it. But, you can still find it via `Activity`
+
+![Github activity](./Pasted%20image%2020250119165000.png)
+
+---
+
+- Bingo!
+
+![Found repo](./Pasted%20image%2020250119164814.png)
+
+---
+
+## Garry: Beyond Music's End 4
+
+Desc: Garry made a new post, I heard he is gonna be a Supreme Wizard today!
+
+---
+
+- In `Garry's x.com` from `Garry: Beyond Music's End 1`, the image description in the gif contains a `link`.
+
+![X.com post](./Screenshot%202025-01-18%20at%206.35.09%20PM.png)
+
+---
+
+- The `link` navigates to a `brainfuck code`.
+  ![Brainfuck code](./Screenshot%202025-01-18%20at%206.34.36%20PM%201.png)
+
+---
+
+- Decrypting `brainfuck code` gets you a `discord link`.
+  ![Discord link](./Pasted%20image%2020250119163523.png)
+
+---
+
+- Inside `discord link`, got `plus code`.
+  ![Plus code](./Screenshot%202025-01-19%20at%204.36.31%20PM.png)
+
+---
+
+- After research `plus code`, it gets to the `location`.
+  ![Location found](./Pasted%20image%2020250119163930.png)
+
+# Brainfuck
+
+## Determination
+
+- Whoever made this challenge, I'll send assassins to u. JK... JK...
+- This challenge is so cooked...
+
+---
+
+- First, I use `premiere pro` to `0.25x speed`.
+- and yes, I watched every frames 😭
+- The challenge is to `spot the flag` `hidden sight` in the video.
+- You get the flag in `3 parts`.
+- The first one ||look bottom left corner||
+  ![Part 1](./Screenshot%202025-01-19%20at%205.00.13%20PM.png)
+- The second one ||left besides tree in white dream||
+  ![Part 2](./Pasted%20image%2020250119172906.png)
+- The third one ||look under the window||
+  ![Part 3](./Pasted%20image%2020250119171128.png)
+- The flag (for those who don't want to cooked): `EQCTF{R3AL_3L1T3_3Y3S1GHT}`
+
+---
+
+# Forensic
+
+## Velociraptor (Unintended)
+
+1. Download the attach file
+2. VeLoCiraptor\C\Users\kelvin\AppData\Roaming\Microsoft\Windows\Recent
+   - We can found some hash on this page with the file name `RVFDVEZ7MXRzX3IzNExseV9o` and `MG1ldzBya190UnVTdF9tMyF9`
+     ![image](./image2.png)
+3. Then just cyberchef it.
+
+## Kuih Lapis
+
+1. Download the poem.pdf file
+2. Throw it into [pdf inspect](https://pdfcrowd.com/inspect-pdf/) website and we will see all the details in this page
+3. And we can see the details and flag at here ![image](./image.png)
