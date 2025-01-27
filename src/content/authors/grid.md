@@ -1,6 +1,6 @@
 ---
 name: 'gr1d'
-avatar: 'https://gravatar.com/avatar/4212c182cfe7f74eeec160db465144b7911ee8ae2843786385d9e6dd66e5c291.webp?size=256'
-bio: '(insert anything)'
-github: 'https://github.com/qs220a'
+avatar: 'https://gravatar.com/avatar/7eca44e6f2a439c4f7cf60ae76cb5441575c5a06916f9c50c08784373f290f23.webp?size=256'
+bio: 'No Logs, No Traces'
+github: 'https://github.com/gr1d-init'
 ---
