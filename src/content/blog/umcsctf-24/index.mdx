@@ -84,9 +84,7 @@ A suspicious **_broken.mp4_** file was suspected of containing a hidden flag. In
 2. Comparative Sample Analysis
    | Original | Sample |
    | -------- | ------- |
-   | ![](./image/Picture12.png)
-   | ![](./image/Picture13.png)
-   |
+   | ![](./image/Picture12.png)| ![](./image/Picture13.png)|
 
 Notice that the file header of ftypisom type of .mp4 file header should be started with \x00\x00\x00\x02 followed by magic bytes ftypisom, hence we should fix the header by referring the sample.
 \*\*The file still don’t run, further analysis required
